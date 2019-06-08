@@ -16,6 +16,7 @@ print "Phase 1\n";
 retest( '^$', 'a', 'F' );
 retest( '^$', '' , 'T' );
 retest( 'a', '', 'F' );
+retest( 'a', 'a', 'T' );
 retest( 'ab', 'ab', 'T' );
 retest( 'a|b', 'a', 'T' );
 retest( 'a|b', 'b' , 'T');
