@@ -25,6 +25,11 @@ retest( 'a*', 'a', 'T' );
 retest( 'a*', 'aa', 'T' );
 retest( '\|', '|', 'T' );
 retest( '\*', '*', 'T' );
+retest( '\a', 'a', 'T' );
+retest( 'a', 'a', 'T' );
+retest( '\t', '	', 'T' );
+retest( '\\t', '\\t', 'T' );
+retest( '\\\\', '\\', 'T' );
 
 print "\n";
 print "Phase 2\n";
