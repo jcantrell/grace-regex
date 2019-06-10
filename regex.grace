@@ -1,126 +1,11 @@
-class pattern (intext) {
-
-    var operators := list[ ".", "|", "*", "+", "("]
-    var precedences := list [ 2, 1, 3, 3, 4 ]
-
-    method operand(c) {
-        operators.contains(c).not && (c ≠ "(") && (c ≠ ")")
-    }
-
-    method prec(op) {
-        var out := -1
-        if { op=="." } then { out := precedences.at 1 }
-        if { op=="|" } then { out := precedences.at 2 }
-        if { op=="*" } then { out := precedences.at 3 }
-        if { op=="+" } then { out := precedences.at 4 }
-        if { op=="(" } then { out := precedences.at 5 }
-        out
-    }
-
-    method stack( initlist ) {
-        object {
-            var ourlist := initlist
-
-            method push( in ) {
-                ourlist.add(in)
-            }
-    
-            method pop {
-                ourlist.removeLast
-            }
-    
-            method peek {
-                var item := pop
-                push(item)
-                item
-            }
-
-            method isEmpty {
-                ourlist.isEmpty
-            }
-            method asString {
-                ourlist.asString
-            }
-        }
-    }
-
-    method queue( initlist ) {
-        object {
-            var ourlist := initlist
-
-            method push( in ) {
-                ourlist.add( in )
-            }
-            method pop {
-                ourlist.removeFirst
-            }
-            method peek {
-                var item := pop
-                ourlist.addFirst(item)
-                item
-            }
-            method isEmpty {
-                ourlist.isEmpty
-            }
-            method asString {
-                ourlist.asString
-            }
-        }
-    }
-
-    method infix2postfix(text) {
-        var outqueue := queue( list[] )
-        object {
-            var opstack := stack( list [] )
-            var explicit := explicitCatenation(text)
-            explicit.do { t → evaluateCharacter(t) }
-            while { opstack.isEmpty.not } do {
-                outqueue.push( opstack.pop )
-            }
-    
-            method explicitCatenation(infix) {
-                if (infix.size < 2) then {
-                    return infix
-                }
-            
-                var insertCat := false
-                var out := list [ ]
-                infix.do { i →
-                    if { insertCat && ( operand(i) || (i=="(") ) } then {
-                        out.push(".")
-                    }
-                    out.push(i)
-                    insertCat := ( operand(i) || (i==")") || ((prec(i) > prec(".")) && ((i=="*") || (i=="+")) ) )
-                }
-                out
-            }
-            method evaluateCharacter( c ) {
-                var stackTop := ""
-                if (opstack.isEmpty.not) then { stackTop := opstack.peek }    
-                if { operators.contains(c).not && (c ≠ ")") } then { 
-                    outqueue.push(c);
-                } elseif { (c == ")") && opstack.isEmpty.not && (stackTop == "(") } then {
-                    opstack.pop
-                } elseif { (opstack.isEmpty.not) && (stackTop ≠ "(") && ((c==")") || (prec(stackTop) ≥ prec(c))) } then {
-                    outqueue.push( opstack.pop )
-                    evaluateCharacter(c)
-                } else {
-                    opstack.push(c)
-                }
-            }
-        }
-        var outlist := list [ ]
-        print "after opstack loop"
-        while { outqueue.isEmpty.not } do {
-            outlist.add( outqueue.pop )
-        }
-        outlist
-    }
-
+class pattern(pattern) {
     def nullNFAState = object {
         def value is public = "nullDFAState"
         method ==(other) {
             value == other.value
+        }
+        method ≠(other) {
+            value ≠ other.value
         }
         method asDebugString { "{value}" }
         method step(character) {
@@ -188,176 +73,295 @@ class pattern (intext) {
         }
     }
 
-    method Fragment( start_in, leaves_in ) {
-        object {
-            var start is public := start_in
-            var leaves is public := leaves_in
+    def RegexParser = object {
+        var tokenList := list [ ]
+        var infix := pattern
         
-            method patch( stateIn ) {
-                var workingList := list [ ]
-                while { leaves.isEmpty.not } do {
-                    var item := leaves.removeLast
-                    item.patch( stateIn )
-                    if (item.isLeaf) then { workingList.add(item) }
+        def grammar = object {
+            method Frag_special {
+                def specials = list [ "[", "]", "(", ")" ]
+                var frag := Frag_gobbleOneOf(specials)
+                if (nullNFAFragment ≠ frag) then {return frag}
+                frag := Frag_operator
+                if (nullNFAFragment ≠ frag) then {return frag}
+                return nullNFAFragment
+            }
+            method Frag_meta {
+                var frag := Frag_operator
+                if (nullNFAFragment ≠ frag) then {return frag}
+                if (gobble("\t")) then {
+                    return NFAFragment( NFAState("\t", nullNFAState, nullNFAState, 0) )
                 }
-                leaves := workingList
-            }
-            method combin( otherFrag ) {
-                leaves := otherFrag.leaves
-            }
-        }
-    }
-
-    method post2nfa( postfix ) {
-        var fragstack := stack( list[] )
-        var stateNum := 1
-        postfix.do { i →
-            if { i == "." } then {
-                var e2 := fragstack.pop
-                var e1 := fragstack.pop
-                e1.patch( e2.start )
-                fragstack.push( Fragment( e1.start, e2.leaves ) )
-            } elseif {i == "|"} then {
-                var e2 := fragstack.pop
-                var e1 := fragstack.pop
-                var s := NFAState( "split", e1.start, e2.start, stateNum )
-                stateNum := stateNum + 1
-                fragstack.push( Fragment( s, e1.leaves ++ e2.leaves ) )
-            } elseif {i == "?"} then {
-                var e := fragstack.pop
-                var s := NFAState( "split", e.start, nullNFAState, stateNum )
-                stateNum := stateNum + 1
-                fragstack.push( Fragment( s, e.leaves ++ list[ s ] ) )
-            } elseif {i == "*"} then {
-                var e := fragstack.pop
-                var s := NFAState( "split", e.start, nullNFAState, stateNum )
-                stateNum := stateNum + 1
-                e.patch(s)
-                fragstack.push( Fragment( s, list [ s ] ) )
-                //fragstack.push( Fragment( s, e.leaves ) )
-            } elseif {i == "+"} then {
-                var e := fragstack.pop
-                var s := NFAState( "split", e.start, nullNFAState, stateNum )
-                stateNum := stateNum + 1
-                e.patch(s)
-                fragstack.push( Fragment(e.start, list[ s ] ) )
-            } else {
-                var s := NFAState( i, nullNFAState, nullNFAState, stateNum )
-                stateNum := stateNum + 1
-                fragstack.push( Fragment(s, list[ s ] ) )
-            }
-        }
-        var e := fragstack.pop
-        var s := NFAState( "match", nullNFAState, nullNFAState, stateNum )
-        e.patch( s )
-        e.start
-    }
-
-    method DFAState( NFAstates_in ) {
-        object {
-            var NFAstates := list [ ]
-            NFAstates_in.do { n →
-                NFAstates := NFAstates ++ n.addState(n)
-            }
-            
-            method isMatch {
-                var flag := false
-                NFAstates.do { x → flag := flag || x.isMatch }
-                flag
-            }
-        
-            method step(character) {
-                var newList := list [ ]
-                NFAstates.do { s →
-                    newList := newList ++ s.step(character)
+                if (gobble("\n")) then {
+                    return NFAFragment( NFAState("\n", nullNFAState, nullNFAState, 0) )
                 }
-                DFAState(newList)
+                frag := Frag_special
+                if (nullNFAFragment ≠ frag) then {return frag}
+                return nullNFAFragment
             }
-        
-            method asDebugString {
-                var retStr := "beginDFAasDebugString "
-                NFAstates.do { x →
-                    retStr := retStr ++ "{x.asDebugString}"
+            method Frag_symbol {
+                def symbolChars = list [
+                    "!","\"","#","$","%","&","'",",","-",".",
+                    "/",":",";","<","=",">","@","^","_","`",
+                    "{","}","~"
+                ]
+                return Frag_gobbleOneOf(symbolChars)
+            }
+            method Frag_digit {
+                def digitChars = list [
+                    "0","1","2","3","4","5","6","7","8","9"
+                ]
+                return Frag_gobbleOneOf(digitChars)
+            }
+            method Frag_upper {
+                def capitalChars = list [
+                    "A","B","C","D","E","F","G","H","I","J","K","L","M","N",
+                    "O","P","Q","R","S","T","U","V","W","X","Y","Z"
+                ]
+                return Frag_gobbleOneOf(capitalChars)
+            }
+            method Frag_lower {
+                def lowerCase = list [
+                    "a","b","c","d","e","f","g","h","i","j","k","l","m","n",
+                    "o","p","q","r","s","t","u","v","w","x","y","z"
+                ]
+                return Frag_gobbleOneOf(lowerCase)
+            }
+            method Frag_operator {
+                def ops = list [ "*", "+", "?", "|" ]
+                return Frag_gobbleOneOf(ops)
+            }
+            method Frag_nonMeta {
+                var frag := Frag_digit
+                if (nullNFAFragment ≠ frag) then {return frag}
+                frag := Frag_upper
+                if (nullNFAFragment ≠ frag) then {return frag}
+                frag := Frag_lower
+                if (nullNFAFragment ≠ frag) then {return frag}
+                frag := Frag_symbol
+                if (nullNFAFragment ≠ frag) then {return frag}
+                return nullNFAFragment
+            }
+            method Frag_character {
+                var frag := Frag_nonMeta
+                if (nullNFAFragment ≠ frag) then {return frag}
+                if (gobble("\\")) then {
+                    frag := Frag_meta
+                    if (nullNFAFragment ≠ frag) then {
+                        return frag
+                    }
                 }
-                retStr ++ " endDFAasDebugString"
+                return nullNFAFragment
             }
-        
-            method debugWalk {
-                print "DEBUG: DFA walk"
-                var workingList := NFAstates_in.copy
-                var visited := list [ ]
-                var added := true
-                while { workingList.isEmpty.not} do {
-                    print "DEBUG: begin loop"
-                    workingList.do { x → print "starting list: {x.num}" }
-                    added := false
-                    if ( workingList.isEmpty.not) then {
-                        var item := workingList.removeLast
-                        //print "checking: {item.num}, {item.value}, connected to {item.out1.asDebugString} and {item.out2.asDebugString}"
-                        var vis := false
-                        visited.do { v → vis := vis || (v.num == item.num) }
-                        print "was visited: {vis}"
-                        if (!vis && !(nullNFAState == item)) then {
-                            visited.add( item )
-                        
-                            if ( !(nullNFAState == item.out1) ) then {
-                                vis := false
-                                visited.do { v → vis := vis || (v.num == item.out2.num) }
-                                workingList.add( item.out1 )
-                            }
-                        
-                            if ( !(nullNFAState == item.out2) ) then {
-                                vis := false
-                                visited.do { v → vis := vis || (v.num == item.out2.num) }
-                                workingList.add( item.out2 )
-                            }
-                        
-                            workingList.do { x → print "adding to list: {x.num}" }
-                            added := true
+            method Frag_elementary {
+                var frag := Frag_group
+                if (nullNFAFragment ≠ frag) then {return frag}
+                frag := Frag_character
+                if (nullNFAFragment ≠ frag) then {return frag}
+                return nullNFAFragment
+            }
+            method Frag_basic {
+                var frag := Frag_elementary
+                if (nullNFAFragment ≠ frag) then {
+                    if (gobble("+")) then {
+                        var s := NFAState("split", frag.start, nullNFAState,0)
+                        frag.patch(s)
+                        return NFAFragment(frag.start) with (list[s])
+                    } elseif {gobble("*")} then {
+                        var s := NFAState("split", frag.start, nullNFAState,1)
+                        frag.patch(s)
+                        return NFAFragment(s) with (list[s])
+                    } elseif {gobble("?")} then {
+                        var s := NFAState("split", frag.start, nullNFAState,2)
+                        return NFAFragment(s) with (frag.leaves++list[s])
+                    }
+                    return frag
+                }
+                return nullNFAFragment
+            }
+            method Frag_concatenation {
+                var frag := Frag_basic
+                if (nullNFAFragment ≠ frag) then {
+                    var frag2 := Frag_concatenation
+                    if (nullNFAFragment ≠ frag2) then {
+                        frag.patch(frag2.start)
+                        return NFAFragment(frag.start) with (frag2.leaves)
+                    }
+                    return frag
+                }
+                return nullNFAFragment
+            }
+            method Frag_alternation {
+                var frag := Frag_concatenation
+                if (nullNFAFragment ≠ frag) then {
+                    if (gobble("|")) then {
+                        var frag2 := Frag_alternation
+                        var s := NFAState( "split", frag.start, frag2.start, 0)
+                        return NFAFragment(s) with (frag.leaves ++ frag2.leaves)
+                    }
+                    return frag
+                }
+                return nullNFAFragment
+            }
+            method Frag_group {
+                if (gobble("(")) then {
+                    var frag := Frag_alternation
+                    if (nullNFAFragment ≠ frag) then {
+                        if (gobble(")")) then {
+                            return frag
                         }
                     }
-                } 
+                }
+                return nullNFAFragment
+            }
+    
+            method Frag_gobbleOneOf(setIn) {
+                var gobbled := false
+                var frag := nullNFAFragment
+                while {!gobbled && setIn.isEmpty.not} do {
+                    var currentChar := setIn.removeFirst
+                    if (gobble(currentChar)) then {
+                        gobbled := true
+                        frag := NFAFragment( NFAState( currentChar, nullNFAState, nullNFAState, 0))
+                    }
+                }
+                return frag
+            }
+            method gobble(charin) {
+                if (infix.startsWith(charin)) then {
+                    infix := infix.substringFrom 2
+                    return true
+                }
+                return false
+            }
+        
+        }
+    
+        method asString {
+            tokenList.asString
+        }
             
-                visited.do { v →
-                    print "I am {v.num}, {v.value}, connected to {v.out1.asDebugString} and {v.out2.asDebugString}"
+        method parsedResult {
+            var mynfa := grammar.Frag_alternation
+            var s := NFAState( "match", nullNFAState, nullNFAState, 3 )
+            if (nullNFAFragment ≠ mynfa) then {
+                mynfa.patch(s)
+            } else {
+                mynfa := NFAFragment( s )
+            }
+            mynfa.start
+        }
+        
+        def nullNFAFragment = object {
+            var start is public := nullNFAState
+            method ==(other) {
+                nullNFAState == other.start
+            }
+            method ≠(other) {
+                nullNFAState ≠ other.start
+            }
+        }
+        method NFAFragment( start_in) with ( leaves_in ) is confidential {
+            object {
+                var start is public := start_in
+                var leaves is public := leaves_in
+            
+                method patch( stateIn ) {
+                    var workingList := list [ ]
+                    while { leaves.isEmpty.not } do {
+                        var item := leaves.removeLast
+                        item.patch( stateIn )
+                        if (item.isLeaf) then { workingList.add(item) }
+                    }
+                    leaves := workingList
+                }
+                method asDebugString {
+                    "Frag: start: {start.asDebugString}, leaves: {leaves}"
                 }
             }
         }
+        
+        method NFAFragment( start_in ) is confidential {
+            NFAFragment( start_in ) with ( list[start_in] )
+        }
     }
-    
+
+    class DFAState( NFAstates_in ) {
+        var NFAstates := list [ ]
+        NFAstates_in.do { n →
+            NFAstates := NFAstates ++ n.addState(n)
+        }
+            
+        method isMatch {
+            var flag := false
+            NFAstates.do { x → flag := flag || x.isMatch }
+            flag
+        }
+        
+        method step(character) {
+            var newList := list [ ]
+            NFAstates.do { s →
+                newList := newList ++ s.step(character)
+            }
+            DFAState(newList)
+        }
+        
+        method asDebugString {
+            var retStr := "beginDFAasDebugString "
+            NFAstates.do { x →
+                retStr := retStr ++ "{x.asDebugString}"
+            }
+            retStr ++ " endDFAasDebugString"
+        }
+        
+        method debugWalk {
+            print "DEBUG: DFA walk"
+            var workingList := NFAstates_in.copy
+            var visited := list [ ]
+            var added := true
+            while { workingList.isEmpty.not} do {
+                print "DEBUG: begin loop"
+                workingList.do { x → print "starting list: {x.num}" }
+                added := false
+                if ( workingList.isEmpty.not) then {
+                    var item := workingList.removeLast
+                    //print "checking: {item.num}, {item.value}, connected to {item.out1.asDebugString} and {item.out2.asDebugString}"
+                    var vis := false
+                    visited.do { v → vis := vis || (v.num == item.num) }
+                    print "was visited: {vis}"
+                    if (!vis && !(nullNFAState == item)) then {
+                        visited.add( item )
+                    
+                        if ( !(nullNFAState == item.out1) ) then {
+                            vis := false
+                            visited.do { v → vis := vis || (v.num == item.out2.num) }
+                            workingList.add( item.out1 )
+                        }
+                    
+                        if ( !(nullNFAState == item.out2) ) then {
+                            vis := false
+                            visited.do { v → vis := vis || (v.num == item.out2.num) }
+                            workingList.add( item.out2 )
+                        }
+                    
+                        workingList.do { x → print "adding to list: {x.num}" }
+                        added := true
+                    }
+                }
+            } 
+        
+            visited.do { v →
+                print "I am {v.num}, {v.value}, connected to {v.out1.asDebugString} and {v.out2.asDebugString}"
+            }
+        }
+    }
+
     method matches( text ) {
+        var nfa := RegexParser.parsedResult
         var currentState := DFAState( list [ nfa ] )
         text.do { c → currentState := currentState.step(c) }
         currentState.isMatch
     }
-    
-    var postfix := infix2postfix(intext)
-    var nfa := post2nfa(postfix)
+
+    method asDebugString { RegexParser.asString }
 }
-
-//def patt="ab|cd*"
-//def patt2="a(bb)+a"
-//
-//var postfix := infix2postfix(patt)
-//print "DEBUG: postfix: {postfix.asString}"
-//print "DEBUG: building NFA"
-//var nfa := post2nfa(postfix)
-//print "DEBUG: building DFA"
-//
-//var currentState := DFAState( list[ nfa ] )
-//print "DEBUG: walking DFA"
-//
-//currentState.debugWalk
-//print "DEBUG: end walk"
-//var text1 := "c"
-//
-//currentState := currentState.step("c")
-//currentState := currentState.step("d")
-//currentState := currentState.step("d")
-//
-//if { currentState.isMatch } then {
-//    print "match!"
-//} else {
-//    print "not match!"
-//}
-

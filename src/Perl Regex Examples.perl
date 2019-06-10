@@ -70,3 +70,6 @@ retest( '^[0-2]$', '3', 'F' );
 retest( '^.$', '`', 'T' );
 retest( '^\s$', ' ', 'T' );
 retest( '^\s$', 'q', 'F' );
+
+print "For fun:\n";
+retest( "a?" x 25 . "a" x 25, "a" x 25, 'T' );
