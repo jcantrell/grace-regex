@@ -1,5 +1,5 @@
 dialect "minispec"
-import "scratch" as regex
+import "regex" as regex
 
 describe "Basic operators: concatanation, |, *, and ?, escaped characters '\*', '\+', etc\n" with {
     specify "empty pattern doesn't match a non-empty text" by {
