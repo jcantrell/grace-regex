@@ -25,6 +25,11 @@ retest( 'a*', 'a', 'T' );
 retest( 'a*', 'aa', 'T' );
 retest( '\|', '|', 'T' );
 retest( '\*', '*', 'T' );
+retest( '\a', 'a', 'T' );
+retest( 'a', 'a', 'T' );
+retest( '\t', '	', 'T' );
+retest( '\\t', '\\t', 'T' );
+retest( '\\\\', '\\', 'T' );
 
 print "\n";
 print "Phase 2\n";
@@ -65,3 +70,6 @@ retest( '^[0-2]$', '3', 'F' );
 retest( '^.$', '`', 'T' );
 retest( '^\s$', ' ', 'T' );
 retest( '^\s$', 'q', 'F' );
+
+print "For fun:\n";
+retest( "a?" x 25 . "a" x 25, "a" x 25, 'T' );
